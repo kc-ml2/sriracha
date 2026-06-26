@@ -1,0 +1,24 @@
+[project]
+name = "sriracha"
+version = "0.1.0"
+description = "영수증 메일을 읽어 구글 스프레드시트에 자동 입력하는 봇 (로컬 vLLM 기반)"
+requires-python = ">=3.10"
+dependencies = [
+    "google-api-python-client>=2.0",
+    "google-auth-oauthlib>=1.0",
+    "google-auth-httplib2>=0.2",
+    "openai>=1.0",
+    "pymupdf>=1.24",
+    "pillow>=10.0",
+    "python-dotenv>=1.0",
+]
+
+[project.scripts]
+sriracha = "sriracha.run:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["sriracha"]

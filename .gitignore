@@ -1,0 +1,25 @@
+# 가상환경
+venv/
+.venv/
+
+# 비밀/인증
+.env
+credentials.json
+token.json
+
+# 로컬 상태
+*.sqlite3
+*.db
+sriracha_store.json
+sriracha_store.json.bak
+sriracha.log
+# 실행 로그/출력 (영수증·메일 정보 포함)
+*.out
+
+# 파이썬
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
