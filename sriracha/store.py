@@ -45,35 +45,47 @@ class Store:
         return bool(rec) and rec.get("status") in ("done", "skipped")
 
     def receipt_no_exists(self, receipt_no: str | None) -> bool:
-        """같은 영수증번호가 이미 시트에 들어갔는지 (done 상태만)."""
+        """같은 영수증번호가 이미 시트에 들어갔는지. 어느 메일의 receipts 든 한 번 삽입됐으면 True.
+
+        부분 실패 후 재시도 시 이미 넣은 건을 중복 삽입하지 않게 막는다.
+        """
         if not receipt_no:
             return False
-        return any(
-            r.get("receipt_no") == receipt_no and r.get("status") == "done"
-            for r in self.records.values()
-        )
+        for rec in self.records.values():
+            for r in rec.get("receipts", []):
+                if r.get("receipt_no") == receipt_no:
+                    return True
+        return False
 
     def attempts(self, message_id: str) -> int:
         rec = self.records.get(message_id)
         return int(rec.get("attempts", 0)) if rec else 0
 
     # ── 기록 ──────────────────────────────────────────────────
-    def mark_done(self, message_id: str, receipt, sheet_row: int | None) -> None:
-        self._upsert(
-            message_id,
-            status="done",
-            is_receipt=True,
-            date=receipt.date,
-            vendor=receipt.vendor,
-            amount=receipt.amount,
-            receipt_no=receipt.receipt_no,
-            sheet_row=sheet_row,
-            error=None,
+    def add_receipt(self, message_id: str, receipt, sheet_tab: str, sheet_row: int) -> None:
+        """영수증 한 건을 시트에 넣은 직후 점진적으로 기록 (메일은 아직 done 아님)."""
+        rec = self.records.get(message_id, {})
+        rec.setdefault("receipts", []).append(
+            {
+                "date": receipt.date,
+                "vendor": receipt.vendor,
+                "amount": receipt.amount,
+                "currency": receipt.currency,
+                "receipt_no": receipt.receipt_no,
+                "is_refund": receipt.is_refund,
+                "sheet_tab": sheet_tab,
+                "sheet_row": sheet_row,
+            }
         )
+        self._upsert(message_id, status="partial", error=None, _existing=rec)
+
+    def mark_done(self, message_id: str) -> None:
+        """메일의 모든 영수증을 처리 완료."""
+        self._upsert(message_id, status="done", error=None)
 
     def mark_skipped(self, message_id: str, reason: str = "not_receipt") -> None:
-        """영수증이 아니거나 중복이라 시트에 안 넣고 더 볼 필요 없는 메일."""
-        self._upsert(message_id, status="skipped", is_receipt=False, error=reason)
+        """영수증이 없거나 처리할 게 없어 더 볼 필요 없는 메일."""
+        self._upsert(message_id, status="skipped", error=reason)
 
     def mark_failed(self, message_id: str, error: str) -> None:
         """실패 — done 마킹 안 하고 다음 cron 때 재시도. attempts 증가."""
@@ -81,8 +93,8 @@ class Store:
             message_id, status="failed", error=error, attempts=self.attempts(message_id) + 1
         )
 
-    def _upsert(self, message_id: str, **fields) -> None:
-        rec = self.records.get(message_id, {})
+    def _upsert(self, message_id: str, _existing: dict | None = None, **fields) -> None:
+        rec = _existing if _existing is not None else self.records.get(message_id, {})
         rec.update(fields)
         rec["message_id"] = message_id
         rec["processed_at"] = time.time()

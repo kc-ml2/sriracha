@@ -34,9 +34,8 @@ class MailSources:
 
 @dataclass
 class Receipt:
-    """LLM 이 추출한 영수증 정보."""
+    """LLM 이 추출한 영수증 한 건 (한 메일에 여러 건일 수 있음)."""
 
-    is_receipt: bool
     date: str | None  # YYYY-MM-DD
     vendor: str | None
     amount: float | None  # 양수 절대값 (부호는 is_refund 로 표현)
@@ -57,7 +56,6 @@ class Receipt:
             return None if not s or s.lower() in ("null", "none", "n/a", "없음") else s
 
         return cls(
-            is_receipt=bool(data.get("is_receipt", False)),
             date=clean(data.get("date")),
             vendor=clean(data.get("vendor")),
             amount=data.get("amount"),

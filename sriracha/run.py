@@ -66,11 +66,11 @@ def run(cfg: Config, dry_run: bool = False) -> int:
 
         # Phase 2 (순차): 시트 입력 / 라벨 / store 기록. 공유 상태는 여기서만 건드린다.
         processed = 0
-        for sources, receipt, error in results:
+        for sources, receipts, error in results:
             try:
-                _apply(cfg, gmail, sheets, store, sources, receipt, error, dry_run)
-                if receipt is not None:
-                    processed += 1
+                processed += _apply(
+                    cfg, gmail, sheets, store, sources, receipts, error, dry_run
+                )
             except Exception as e:
                 log.exception("반영 실패 (%s): %s", sources.message_id, e)
                 store.mark_failed(sources.message_id, str(e))
@@ -89,13 +89,14 @@ def _extract_parallel(llm, sources_list, concurrency):
         if not sources.has_content:
             return i, sources, None, "empty"
         try:
-            receipt = llm.extract(sources)
+            receipts = llm.extract(sources)
             log.info(
-                "추출 결과: %s | is_receipt=%s refund=%s date=%s vendor=%s amount=%s no=%s conf=%.2f",
-                sources.message_id, receipt.is_receipt, receipt.is_refund, receipt.date,
-                receipt.vendor, receipt.signed_amount, receipt.receipt_no, receipt.confidence,
+                "추출 결과: %s | 영수증 %d건 %s",
+                sources.message_id,
+                len(receipts),
+                [(r.date, r.vendor, r.signed_amount, r.receipt_no) for r in receipts],
             )
-            return i, sources, receipt, None
+            return i, sources, receipts, None
         except Exception as e:
             log.warning("추출 최종 실패 (%s): %s", sources.message_id, e)
             return i, sources, None, str(e)
@@ -109,8 +110,8 @@ def _extract_parallel(llm, sources_list, concurrency):
     return results
 
 
-def _apply(cfg, gmail, sheets, store, sources, receipt, error, dry_run) -> None:
-    """추출 결과를 시트/라벨/store 에 반영 (순차 단계)."""
+def _apply(cfg, gmail, sheets, store, sources, receipts, error, dry_run) -> int:
+    """추출 결과를 시트/라벨/store 에 반영 (순차 단계). 시트에 넣은 영수증 수 반환."""
     mid = sources.message_id
 
     # 내용 없음 → skip
@@ -119,41 +120,42 @@ def _apply(cfg, gmail, sheets, store, sources, receipt, error, dry_run) -> None:
         if not dry_run:
             store.mark_skipped(mid, "empty")
             gmail.add_label(mid, cfg.done_label)
-        return
+        return 0
 
     # 추출 실패 → done 마킹 안 함 (다음 cron 때 재시도)
-    if receipt is None:
+    if receipts is None:
         if not dry_run:
             store.mark_failed(mid, error or "unknown")
-        return
+        return 0
 
     if dry_run:
-        return
+        return 0
 
-    # 영수증 아님 → 시트에 안 넣고 다시 안 보게 마킹
-    if not receipt.is_receipt:
+    # 영수증 0건 → 영수증 메일 아님
+    if not receipts:
         store.mark_skipped(mid, "not_receipt")
         gmail.add_label(mid, cfg.done_label)
-        return
+        return 0
 
-    # 금액 없는 결제확인(예: 'Welcome to Max plan') → 시트에 안 넣음
-    if receipt.amount is None:
-        log.info("금액 없음 → skip: %s", mid)
-        store.mark_skipped(mid, "no_amount")
-        gmail.add_label(mid, cfg.done_label)
-        return
+    # 메일 안의 각 영수증을 개별 삽입. (예외는 상위로 올라가 메일이 failed → 다음 재시도,
+    # 이미 넣은 영수증은 receipt_no 로 중복 방지됨)
+    inserted = 0
+    for r in receipts:
+        if r.amount is None:  # 금액 없는 항목(예: 'Welcome to Max plan')은 건너뜀
+            log.info("금액 없음 → 항목 skip: %s", mid)
+            continue
+        if store.receipt_no_exists(r.receipt_no):  # 이미 들어간 영수증
+            log.info("중복 영수증번호 → 항목 skip: %s", r.receipt_no)
+            continue
+        tab, row = sheets.insert_receipt(r)
+        store.add_receipt(mid, r, tab, row)
+        inserted += 1
+        log.info("시트 입력: %s [%s] row=%s (%s %s)", mid, tab, row, r.vendor, r.signed_amount)
 
-    # 같은 영수증번호가 이미 들어갔으면 중복 → skip
-    if store.receipt_no_exists(receipt.receipt_no):
-        log.info("중복 영수증번호 → skip: %s", receipt.receipt_no)
-        store.mark_skipped(mid, "duplicate_receipt_no")
-        gmail.add_label(mid, cfg.done_label)
-        return
-
-    tab, sheet_row = sheets.insert_receipt(receipt)
-    store.mark_done(mid, receipt, sheet_row)
+    # 메일의 모든 항목 처리 완료 → done + 라벨
+    store.mark_done(mid)
     gmail.add_label(mid, cfg.done_label)
-    log.info("시트 입력 완료: %s [%s] row=%s", mid, tab, sheet_row)
+    return inserted
 
 
 def main() -> None:
