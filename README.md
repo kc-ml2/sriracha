@@ -14,7 +14,7 @@ cron ──> python -m sriracha.run
      - 영수증 여부도 LLM이 판별 (라벨에만 의존하지 않음)
      - 여러 메일을 동시(병렬) 추출
   4. 중복 확인 (message-id + receipt_no)
-  5. 날짜 정렬 위치에 시트 행 삽입 (안 되면 맨 아래 append)
+  5. 영수증 연도로 탭 선택(없으면 자동 생성) → 날짜 정렬 위치에 행 삽입
      - 원화 컬럼은 '=금액*$환율셀' 수식, 환불은 음수로 기록
   6. Gmail에 sriracha/done 라벨 + JSON 파일에 기록
 ```
@@ -46,7 +46,9 @@ cp .env.example .env       # 값 채우기
 | 변수 | 설명 |
 |---|---|
 | `SRIRACHA_SPREADSHEET_ID` | 대상 스프레드시트 ID (URL의 `/d/<ID>/` 부분) |
-| `SRIRACHA_SHEET_TAB` | 데이터 탭 이름 |
+| `SRIRACHA_SHEET_TAB` | 데이터 탭 이름. `{year}` 넣으면 연도별 탭 자동 라우팅/생성 |
+| `SRIRACHA_SHEET_TITLE` | 탭 자동생성 시 1행 제목 |
+| `SRIRACHA_DEFAULT_RATE` | 탭 자동생성 시 환율셀 초기값 |
 | `SRIRACHA_FIRST_DATA_ROW` | 첫 데이터 행 (헤더 다음) |
 | `SRIRACHA_COLUMNS` | 컬럼 순서. 키: `date,vendor,currency,amount,amount_krw,receipt_no` |
 | `SRIRACHA_RATE_CELL` | 기준환율이 든 시트 셀 (예: `J1`). 원화 수식이 절대참조로 사용 |
@@ -117,4 +119,5 @@ sriracha/
 - [ ] **환율 자동 조회** — 고정 셀 대신 거래일 기준 환율 API 연동 (선택)
 - [ ] **알림** — 처리/실패 결과를 슬랙·메일로 요약 통지
 - [ ] **테스트** — 추출/시트/중복방지 단위 테스트 정식화 (현재는 수동 검증)
-- [ ] **다중 통화/시트** — 월별·연도별 탭 자동 라우팅
+- [x] **연도별 탭 자동 라우팅/생성** — 영수증 연도로 탭 선택, 없으면 생성
+- [ ] **월별 집계** — 월별 합계/리포트 탭

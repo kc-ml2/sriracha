@@ -35,10 +35,12 @@ class Config:
 
     # Sheets
     spreadsheet_id: str
-    sheet_tab: str
+    sheet_tab: str  # '{year}' 플레이스홀더 가능 → 연도별 탭 자동 라우팅
+    sheet_title: str  # 탭 자동생성 시 1행 제목
     first_data_row: int
     columns: list[str]
-    rate_cell: str  # 기준환율이 든 시트 셀 (예: H7) — 원화 수식에 절대참조로 사용
+    rate_cell: str  # 기준환율이 든 시트 셀 (예: J1) — 원화 수식에 절대참조로 사용
+    default_rate: float  # 탭 자동생성 시 환율셀 초기값
 
     # vLLM
     vllm_base_url: str
@@ -63,11 +65,13 @@ class Config:
             max_messages=int(os.getenv("SRIRACHA_MAX_MESSAGES", "20")),
             spreadsheet_id=os.getenv("SRIRACHA_SPREADSHEET_ID", ""),
             sheet_tab=os.getenv("SRIRACHA_SHEET_TAB", "Sheet1"),
+            sheet_title=os.getenv("SRIRACHA_SHEET_TITLE", "정보이용료 사용내역"),
             first_data_row=int(os.getenv("SRIRACHA_FIRST_DATA_ROW", "2")),
             columns=_split_csv(
                 os.getenv("SRIRACHA_COLUMNS", "date,vendor,currency,amount,amount_krw,receipt_no")
             ),
-            rate_cell=os.getenv("SRIRACHA_RATE_CELL", "H7").strip(),
+            rate_cell=os.getenv("SRIRACHA_RATE_CELL", "J1").strip(),
+            default_rate=float(os.getenv("SRIRACHA_DEFAULT_RATE", "1500")),
             vllm_base_url=os.getenv("SRIRACHA_VLLM_BASE_URL", "http://localhost:8000/v1"),
             vllm_api_key=os.getenv("SRIRACHA_VLLM_API_KEY", "EMPTY"),
             model=os.getenv("SRIRACHA_MODEL", "").strip(),

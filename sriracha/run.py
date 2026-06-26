@@ -150,10 +150,10 @@ def _apply(cfg, gmail, sheets, store, sources, receipt, error, dry_run) -> None:
         gmail.add_label(mid, cfg.done_label)
         return
 
-    sheet_row = sheets.insert_receipt(receipt)
+    tab, sheet_row = sheets.insert_receipt(receipt)
     store.mark_done(mid, receipt, sheet_row)
     gmail.add_label(mid, cfg.done_label)
-    log.info("시트 입력 완료: %s row=%s", mid, sheet_row)
+    log.info("시트 입력 완료: %s [%s] row=%s", mid, tab, sheet_row)
 
 
 def main() -> None:
